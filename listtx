@@ -1,0 +1,119 @@
+#!/usr/bin/perl
+
+# Copyright (c) 2013 Todd T. Fries <todd@fries.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+use strict;
+use warnings;
+
+use OpenBSD::Getopt;
+
+use POSIX qw(strftime);
+
+our $opt_p; # port
+our $opt_a; # account
+our $opt_w; # wallet name (appended to Assets:Wallets:)
+our $opt_m; # matching transaction account name
+
+# XXX with no $opt_a, list all accounts and transactions??
+
+getopts('a:p:w:');
+
+sub usage
+{
+	printf STDERR "must define account (-a <acct>) and port (-p <port>)\n";
+	exit(1);
+}
+
+if (!defined($opt_a) && !defined($opt_p)) {
+	usage();
+}
+
+my $line;
+my $tx = 0;
+my $cmd = "bitcoind -rpcport=${opt_p} listtransactions ${opt_a}";
+printf STDERR "cmd: %s\n",$cmd;
+open(BTC,"${cmd} 2>&1 |");
+
+my $addr;
+my $mult;
+my $amount;
+my $time;
+my $txid;
+while(<BTC>) {
+	chomp($line = $_);
+
+	next if ($line =~ /^[\[\]]/);
+	if ($line =~ /\s+}/) {
+		printf "; %d. txid %s\n", $tx, $txid;
+		printf "%s coin\n", $time;
+		printf "    Assets:Wallets:%s\tBTC\t%0.8f\n",
+		    $opt_w, $amount;
+		printf "    %s\n\n",$opt_m;
+		next;
+	}
+
+	if ($line =~ /{/) {
+		$tx++;
+		$addr = undef;
+		$mult = undef;
+		$amount = undef;
+		$time = undef;
+		$txid = undef;
+		next;
+	}
+
+	if ($line =~ /^\s+\"([a-z]+)\"\s+:\s+(.*)$/) {
+		my ($var,$val) = ($1,$2);
+		if ($var =~ /(account|blockhash|blockindex|blocktime|confirmations|timereceived)/) {
+			next;
+		}
+		# remove comma
+		if ($val =~ /^(.*),$/) {
+			$val = $1;
+		}
+		# remove quotes
+		if ($val =~ /^\"(.*)\"$/) {
+			$val = $1;
+		}
+		if ($var eq "address") {
+			$addr = $val;
+			next;
+		}
+		if ($var eq "category") {
+			if ($val eq "receive") {
+				$mult = 1;
+				next;
+			}
+			printf "%02d: %s = '%s' not unhandled\n",$tx,$var,$val;
+			next;
+		}
+		if ($var =~ /time/) {
+			$time = strftime("%Y/%m/%d %H:%M:%S", localtime($val));
+			next;
+		}
+		if ($var eq "amount") {
+			$amount = $val;
+			next;
+		}
+		if ($var eq "txid") {
+			$txid = $val;
+			next;
+		}
+		printf "%02d: %s = '%s'\n",$tx,$var,$val;
+		next;
+	}
+	printf STDERR "Unparsed line: %s\n", $line;
+}
+close(BTC);
