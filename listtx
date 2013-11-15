@@ -28,7 +28,7 @@ our $opt_m; # matching transaction account name
 
 # XXX with no $opt_a, list all accounts and transactions??
 
-getopts('a:p:w:');
+getopts('a:m:p:w:');
 
 sub usage
 {
@@ -57,6 +57,7 @@ while(<BTC>) {
 	next if ($line =~ /^[\[\]]/);
 	if ($line =~ /\s+}/) {
 		printf "; %d. txid %s\n", $tx, $txid;
+		printf "; %d. addr %s\n", $tx, $addr;
 		printf "%s coin\n", $time;
 		printf "    Assets:Wallets:%s\tBTC\t%0.8f\n",
 		    $opt_w, $amount;
