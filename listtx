@@ -21,34 +21,31 @@ use OpenBSD::Getopt;
 
 use POSIX qw(strftime);
 
-our $opt_p; # port
-our $opt_a; # account
 our $opt_w; # wallet name (appended to Assets:Wallets:)
 our $opt_m; # matching transaction received account name
 our $opt_s; # matching transaction spent    account name
+our $opt_x; # command to access the wallet
 
-# XXX with no $opt_a, list all accounts and transactions??
-
-getopts('a:m:p:s:w:');
+getopts('m:s:w:x:');
 
 sub usage
 {
-	printf STDERR "must define account (-a <acct>) and port (-p <port>)\n";
+	printf STDERR "must define -x <command> to access the wallet\n";
 	exit(1);
 }
 
-if (!defined($opt_a) && !defined($opt_p)) {
+if (!defined($opt_x)) {
 	usage();
 }
 
 # get accounts and addresses
-my $cmd = "bitcoind -rpcport=${opt_p} listaccounts";
+my $cmd = $opt_x." listaccounts";
 my $line;
 my @accts;
 open(BTC,"${cmd} 2>&1 |");
 while(<BTC>) {
 	chomp($line = $_);
-	if ($line =~ /^\s+"(.*)" : [0-9]+\.[0-9]{8,8}/) {
+	if ($line =~ /^\s+"(.*)"\s*:\s*[0-9]+\.[0-9]{8,8}/) {
 		push @accts, $1;
 	}
 }
@@ -57,8 +54,8 @@ close(BTC);
 my %acctaddrs;
 my %addracct;
 foreach my $acct (@accts) {
-	printf "; Assets:Wallets:%s\n", $acct if ($acct eq $opt_a);
-	$cmd = "bitcoind -rpcport=${opt_p} getaddressesbyaccount \"${acct}\"";
+	printf "; Assets:Wallets:%s\n", $acct; #if ($acct eq $opt_a);
+	$cmd = $opt_x." getaddressesbyaccount \"${acct}\"";
 	open(BTC,"${cmd} 2>&1 |");
 	while(<BTC>) {
 		chomp($line = $_);
@@ -66,7 +63,7 @@ foreach my $acct (@accts) {
 		if ($line =~ /^\s+"(1[0-9A-Za-z]+)"/) {
 			my $address = $1;
 			#printf STDERR "\"%s\" : \"%s\"\n", $address, $acct;
-			printf ";     %s\n", $address if ($acct eq $opt_a);
+			printf ";     %s\n", $address; #if ($acct eq $opt_a);
 			$addracct{$address} = $acct;
 			push @{$acctaddrs{$acct}}, $address;
 		}
@@ -76,7 +73,7 @@ foreach my $acct (@accts) {
 print "\n";
 
 my $tx = 0;
-$cmd = "bitcoind -rpcport=${opt_p} listtransactions ${opt_a}";
+$cmd = $opt_x." listtransactions "; # ${opt_a}";
 #printf STDERR "cmd: %s\n",$cmd;
 open(BTC,"${cmd} 2>&1 |");
 
@@ -122,13 +119,13 @@ while(<BTC>) {
 		$time = undef;
 		$txid = undef;
 		$otheraccount = undef;
-		$thisaccount = $opt_a;
+		$thisaccount = ""; # $opt_a;
 		$fee = undef;
 		$comment = undef;
 		next;
 	}
 
-	if ($line =~ /^\s+\"([a-z]+)\"\s+:\s+(.*)$/) {
+	if ($line =~ /^\s+\"([a-z]+)\"\s*:\s*(.*)$/) {
 		my ($var,$val) = ($1,$2);
 		if ($var =~ /(blockhash|blockindex|blocktime|confirmations|timereceived)/) {
 			next;
@@ -205,6 +202,6 @@ while(<BTC>) {
 		printf "; %02d: %s = '%s' not handled\n",$tx,$var,$val;
 		next;
 	}
-	printf STDERR "Unparsed line: %s\n", $line;
+	printf STDERR "Unparsed line: '%s'\n", $line;
 }
 close(BTC);
