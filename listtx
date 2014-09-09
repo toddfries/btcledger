@@ -26,6 +26,9 @@ our $opt_m; # matching transaction received account name
 our $opt_s; # matching transaction spent    account name
 our $opt_x; # command to access the wallet
 
+$opt_m = "received";
+$opt_s = "spent";
+
 getopts('m:s:w:x:');
 
 sub usage
@@ -73,7 +76,7 @@ foreach my $acct (@accts) {
 print "\n";
 
 my $tx = 0;
-$cmd = $opt_x." listtransactions "; # ${opt_a}";
+$cmd = $opt_x." listtransactions '' 999999"; # ${opt_a}";
 #printf STDERR "cmd: %s\n",$cmd;
 open(BTC,"${cmd} 2>&1 |");
 
@@ -151,8 +154,11 @@ while(<BTC>) {
 		if ($var eq "account") {
 			next;
 		}
+		if ($var eq "walletconflicts") {
+			next;
+		}
 		if ($var eq "category") {
-			if ($val eq "receive") {
+			if ($val eq "receive" || $val eq "generate") {
 				$otheraccount=$opt_m;
 				if (defined($addr)) {
 					if (defined($addracct{$addr})) {
@@ -202,6 +208,10 @@ while(<BTC>) {
 		printf "; %02d: %s = '%s' not handled\n",$tx,$var,$val;
 		next;
 	}
+	if ($line =~ /^null$/) {
+		next;
+	}
+	
 	printf STDERR "Unparsed line: '%s'\n", $line;
 }
 close(BTC);
